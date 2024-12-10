@@ -28,7 +28,7 @@ void main(List<String> arguments) {
       bitvcs.initRepository();
       break;
     case 'add':
-      // bitvcs.addFiles(results.command!.arguments);
+      bitvcs.addFiles(results.command!.arguments);
       break;
     case 'commit':
       // bitvcs.commitChanges(results.command!.arguments);
