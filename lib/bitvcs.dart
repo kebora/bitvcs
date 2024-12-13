@@ -182,3 +182,82 @@ void logCommitHistory() {
   }
 }
 //
+void createBranch(String branchName) {
+  final headFile = File('.bitvcs/HEAD');
+
+  // Ensure repository is initialized
+  if (!headFile.existsSync()) {
+    print('Error: No repository found. Did you forget to initialize one?');
+    return;
+  }
+
+  // Read the HEAD file to determine the current branch and commit
+  final headRef = headFile.readAsStringSync().trim();
+  if (!headRef.startsWith('ref: ')) {
+    print('Error: HEAD is not pointing to a branch.');
+    return;
+  }
+
+  final currentBranchFile = File('.bitvcs/${headRef.substring(5)}');
+  if (!currentBranchFile.existsSync()) {
+    print('Error: Current branch does not have any commits.');
+    return;
+  }
+
+  final currentCommit = currentBranchFile.readAsStringSync().trim();
+
+  // Create the new branch file
+  final newBranchFile = File('.bitvcs/refs/heads/$branchName');
+  if (newBranchFile.existsSync()) {
+    print('Error: Branch "$branchName" already exists.');
+    return;
+  }
+
+  newBranchFile.writeAsStringSync(currentCommit);
+  print('Branch "$branchName" created at commit $currentCommit.');
+}
+//
+void cloneRepository(String destinationPath) {
+  final sourceDir = Directory('.bitvcs');
+
+  // Ensure the repository is initialized
+  if (!sourceDir.existsSync()) {
+    print('Error: No repository found. Did you forget to initialize one?');
+    return;
+  }
+
+  // Ensure the destination directory is not inside the source
+  if (Directory(destinationPath).absolute.path.startsWith(Directory.current.absolute.path)) {
+    print('Error: Cannot clone into a subdirectory of the current repository.');
+    return;
+  }
+
+  // Create the destination directory
+  final destinationDir = Directory(destinationPath);
+  if (destinationDir.existsSync()) {
+    print('Error: Destination path already exists.');
+    return;
+  }
+
+  destinationDir.createSync(recursive: true);
+
+  // Recursively copy the repository files to the destination
+  void copyDirectory(Directory source, Directory target) {
+    for (var entity in source.listSync(recursive: false)) {
+      if (entity is File) {
+        final targetFile = File('${target.path}/${entity.uri.pathSegments.last}');
+        targetFile.createSync(recursive: true);
+        targetFile.writeAsBytesSync(entity.readAsBytesSync());
+      } else if (entity is Directory) {
+        final newDirectory = Directory('${target.path}/${entity.uri.pathSegments.last}');
+        newDirectory.createSync();
+        copyDirectory(entity, newDirectory);
+      }
+    }
+  }
+
+  copyDirectory(sourceDir, destinationDir);
+
+  print('Repository cloned to $destinationPath');
+}
+//

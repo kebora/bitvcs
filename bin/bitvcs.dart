@@ -10,9 +10,7 @@ void main(List<String> arguments) {
   ..addCommand('commit')
   ..addCommand('log')
   ..addCommand('branch')
-  ..addCommand('checkout')
-  ..addCommand('merge')
-  ..addCommand('diff')
+  ..addCommand('clone')
   ..addFlag('help', abbr: 'h', negatable: false, help: 'Displays help information.');
 
   final results = parser.parse(arguments);
@@ -20,7 +18,7 @@ void main(List<String> arguments) {
   if (results['help'] as bool || results.command == null) {
     print('Usage: bitvcs <command> [options]');
     print(parser.usage);
-    print("Available commands\n");
+    print("Available commands");
     for (var command in parser.commands.keys) {
     print(' $command');
   }
@@ -39,6 +37,12 @@ void main(List<String> arguments) {
       break;
     case 'log':
       bitvcs.logCommitHistory();
+      break;
+    case 'branch':
+      bitvcs.createBranch(results.command!.arguments[0]);
+      break;
+    case 'clone':
+      bitvcs.cloneRepository(results.command!.arguments[0]);
       break;
     default:
       print('Unknown command. Use --help for available commands.');
