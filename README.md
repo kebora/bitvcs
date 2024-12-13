@@ -15,6 +15,6 @@ Add any file from the working dir to `staged` state using command `dart run bitv
 Commit the files using command `dart run bitvcs commit "any message"`<br/>
 View the commit history using command `dart run bitvcs log`<br/>
 Create a new branch using command `dart run bitvcs branch "branchName"`<br/>
-Clone the Repository using command `dart run bitvcs clone "destinationPath"`
-
-
+Clone the Repository using command `dart run bitvcs clone "destinationPath"`<br/>
+Merge Repositories using command `dart run bitvcs merge "sourceBranch"`
+The targetBranch is set to `main`.
