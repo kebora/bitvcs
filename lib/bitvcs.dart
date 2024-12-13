@@ -282,3 +282,158 @@ void cloneRepository(String destinationPath) {
   print('Repository cloned to $destinationPath');
 }
 //
+void mergeBranch(String sourceBranch) {
+  final headFile = File('.bitvcs/HEAD');
+
+  // Ensure repository is initialized
+  if (!headFile.existsSync()) {
+    print('Error: No repository found. Did you forget to initialize one?');
+    return;
+  }
+
+  // Read the HEAD file to determine the current branch
+  final headRef = headFile.readAsStringSync().trim();
+  if (!headRef.startsWith('ref: refs/heads/')) {
+    print('Error: HEAD is not pointing to a branch.');
+    return;
+  }
+
+  final targetBranch = headRef.substring(5); // Extract target branch (e.g., refs/heads/main)
+  final targetBranchFile = File('.bitvcs/$targetBranch');
+  final sourceBranchFile = File('.bitvcs/refs/heads/$sourceBranch');
+
+  if (!sourceBranchFile.existsSync()) {
+    print('Error: Source branch "$sourceBranch" does not exist.');
+    return;
+  }
+
+  // Get the commit hashes
+  final targetCommit = targetBranchFile.readAsStringSync().trim();
+  final sourceCommit = sourceBranchFile.readAsStringSync().trim();
+
+  // Find the common ancestor (simplified for linear history)
+  final baseCommit = _findCommonAncestor(targetCommit, sourceCommit);
+  if (baseCommit == null) {
+    print('Error: No common ancestor found. Are these branches related?');
+    return;
+  }
+
+  print('Merging branch "$sourceBranch" into "${targetBranch.split('/').last}"');
+  print('Base commit: $baseCommit');
+
+  // Perform the merge
+  final targetFiles = _getFilesInCommit(targetCommit);
+  final sourceFiles = _getFilesInCommit(sourceCommit);
+
+  final mergedFiles = <String, String>{};
+  bool hasConflicts = false;
+
+  for (final file in {...targetFiles.keys, ...sourceFiles.keys}) {
+    final baseContent = _getFileContentInCommit(baseCommit, file);
+    final targetContent = targetFiles[file];
+    final sourceContent = sourceFiles[file];
+
+    if (targetContent == sourceContent) {
+      // No changes or identical changes
+      mergedFiles[file] = targetContent!;
+    } else if (targetContent == baseContent) {
+      // Target branch did not modify the file, take source changes
+      mergedFiles[file] = sourceContent!;
+    } else if (sourceContent == baseContent) {
+      // Source branch did not modify the file, keep target changes
+      mergedFiles[file] = targetContent!;
+    } else {
+      // Conflict: Both branches modified the file differently
+      hasConflicts = true;
+      final conflictContent = '''
+<<<<<<< TARGET
+$targetContent
+=======
+$sourceContent
+>>>>>>> SOURCE
+''';
+      mergedFiles[file] = conflictContent;
+      print('Conflict detected in file: $file');
+    }
+  }
+
+  if (hasConflicts) {
+    print('Merge completed with conflicts. Resolve conflicts before committing.');
+  } else {
+    // Write the merge commit
+    final commitHash = _createMergeCommit(mergedFiles, sourceBranch, targetCommit);
+    targetBranchFile.writeAsStringSync(commitHash);
+    print('Merge completed successfully. New commit: $commitHash');
+  }
+}
+
+String? _findCommonAncestor(String commit1, String commit2) {
+  // Simplified implementation assuming linear history
+  final visited = <String>{};
+  String? current = commit1;
+
+  while (current != null) {
+    visited.add(current);
+    current = _getParentCommit(current);
+  }
+
+  current = commit2;
+  while (current != null) {
+    if (visited.contains(current)) {
+      return current;
+    }
+    current = _getParentCommit(current);
+  }
+
+  return null;
+}
+
+Map<String, String> _getFilesInCommit(String commitHash) {
+  final commitFile = File('.bitvcs/objects/$commitHash');
+  if (!commitFile.existsSync()) return {};
+
+  final content = commitFile.readAsStringSync();
+  final fileLines = content.split('\n').where((line) => line.startsWith('file: '));
+
+  return {
+    for (final line in fileLines)
+      line.split(' ')[1]: line.split(' ')[2], // file: <filename> <hash>
+  };
+}
+
+String? _getFileContentInCommit(String commitHash, String fileName) {
+  final files = _getFilesInCommit(commitHash);
+  final fileHash = files[fileName];
+  if (fileHash == null) return null;
+
+  final objectFile = File('.bitvcs/objects/$fileHash');
+  return objectFile.existsSync() ? objectFile.readAsStringSync() : null;
+}
+
+String? _getParentCommit(String commitHash) {
+  final commitFile = File('.bitvcs/objects/$commitHash');
+  if (!commitFile.existsSync()) return null;
+
+  final parentLine = commitFile
+      .readAsLinesSync()
+      .firstWhere((line) => line.startsWith('parent: '), orElse: () => '');
+  return parentLine.isNotEmpty ? parentLine.substring(8) : null;
+}
+
+String _createMergeCommit(Map<String, String> mergedFiles, String sourceBranch, String parentHash) {
+  final commitHash = sha1.convert(utf8.encode(DateTime.now().toIso8601String())).toString();
+  final commitFile = File('.bitvcs/objects/$commitHash');
+
+  final content = StringBuffer()
+    ..writeln('parent: $parentHash')
+    ..writeln('merged: refs/heads/$sourceBranch');
+
+  for (final entry in mergedFiles.entries) {
+    final fileHash = sha1.convert(utf8.encode(entry.value)).toString();
+    File('.bitvcs/objects/$fileHash').writeAsStringSync(entry.value);
+    content.writeln('file: ${entry.key} $fileHash');
+  }
+
+  commitFile.writeAsStringSync(content.toString());
+  return commitHash;
+}

@@ -11,6 +11,7 @@ void main(List<String> arguments) {
   ..addCommand('log')
   ..addCommand('branch')
   ..addCommand('clone')
+  ..addCommand('merge')
   ..addFlag('help', abbr: 'h', negatable: false, help: 'Displays help information.');
 
   final results = parser.parse(arguments);
@@ -44,6 +45,9 @@ void main(List<String> arguments) {
     case 'clone':
       bitvcs.cloneRepository(results.command!.arguments[0]);
       break;
+    case 'merge':
+      bitvcs.mergeBranch(results.command!.arguments[0]);
+      break;  
     default:
       print('Unknown command. Use --help for available commands.');
   }
