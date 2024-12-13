@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+
 //
 void initRepository() {
   final bitDir = Directory('.bitvcs');
@@ -17,23 +19,51 @@ void initRepository() {
     print('Initialized empty repository in ${Directory.current.path}/.bitvcs');
   }
 }
-//
-void addFiles(List<String> files){
-    if (files.isEmpty) {
-    print('No files specified to add.');
-    return;
-  }
 
+//
+void addFile(List<String> files) {
   final indexFile = File('.bitvcs/index');
+
+  // Ensure the repository exists
   if (!indexFile.existsSync()) {
-    print('Error: Repository not initialized. Run "bitvcs init".');
+    print('Error: No repository found. Did you forget to initialize one?');
     return;
   }
 
-  final currentIndex = indexFile.readAsStringSync().split('\n').where((line) => line.isNotEmpty).toList();
-  currentIndex.addAll(files);
-  indexFile.writeAsStringSync('${currentIndex.join('\n')}\n');
-  print('Added files: ${files.join(', ')}');
-}
+  // Read the current index content
+  final indexContent = indexFile.readAsStringSync();
+  final updatedIndex = StringBuffer(indexContent);
 
-//
+  for (final filePath in files) {
+    final file = File(filePath);
+
+    // Check if file exists
+    if (!file.existsSync()) {
+      print('Warning: File "$filePath" does not exist.');
+      continue;
+    }
+
+    // Compute the file's hash
+    final fileContent = file.readAsBytesSync();
+    final fileHash = sha1.convert(fileContent).toString();
+
+    // Write the object to .bitvcs/objects/<hash>
+    final objectPath = '.bitvcs/objects/$fileHash';
+    final objectFile = File(objectPath);
+
+    if (!objectFile.existsSync()) {
+      objectFile.writeAsBytesSync(fileContent);
+    }
+
+    // Update the index
+    final fileEntry = '$filePath $fileHash\n';
+    if (!updatedIndex.toString().contains(fileEntry)) {
+      updatedIndex.writeln(fileEntry.trim());
+    }
+  }
+
+  // Write back the updated index
+  indexFile.writeAsStringSync(updatedIndex.toString());
+
+  print('Files added to staging area.');
+}
