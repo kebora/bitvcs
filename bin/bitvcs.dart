@@ -36,10 +36,10 @@ void main(List<String> arguments) {
       bitvcs.addFile(results.command!.arguments);
       break;
     case 'commit':
-      // bitvcs.commitChanges(results.command!.arguments);
+      bitvcs.commit(results.command!.arguments[0]);
       break;
     case 'log':
-      print("Log is still under development!");
+      bitvcs.logCommitHistory();
       break;
     default:
       print('Unknown command. Use --help for available commands.');
