@@ -2,8 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
+import 'package:glob/glob.dart';
 
-//
+// initialize a new repo
 void initRepository() {
   final bitDir = Directory('.bitvcs');
   if (bitDir.existsSync()) {
@@ -12,6 +13,7 @@ void initRepository() {
     bitDir.createSync();
     //
     Directory('.bitvcs/objects').createSync();
+    Directory('.bitvcs/refs').createSync();
     Directory('.bitvcs/refs/heads').createSync();
     // main branch
     File('.bitvcs/HEAD').writeAsStringSync('ref: refs/heads/main');
@@ -21,55 +23,74 @@ void initRepository() {
   }
 }
 
-//
+// add a file(s) to staging area
 void addFile(List<String> files) {
-  final indexFile = File('.bitvcs/index');
+  final bitDir = Directory('.bitvcs');
 
-  // Ensure the repository exists
-  if (!indexFile.existsSync()) {
+  // Ensure repository is initialized
+  if (!bitDir.existsSync()) {
     print('Error: No repository found. Did you forget to initialize one?');
     return;
   }
 
-  // Read the current index content
-  final indexContent = indexFile.readAsStringSync();
-  final updatedIndex = StringBuffer(indexContent);
+  final indexFile = File('.bitvcs/index');
+  final objectsDir = Directory('.bitvcs/objects');
+
+  // Read ignored patterns from .bitvcs/ignore
+  final ignoreFile = File('.bitvcs/ignore');
+  final ignorePatterns = ignoreFile.existsSync()
+      ? ignoreFile.readAsLinesSync().where((line) => line.trim().isNotEmpty && !line.startsWith('#')).toList()
+      : [];
+
+  final ignoredGlobs = ignorePatterns.map((pattern) => Glob(pattern));
 
   for (final filePath in files) {
     final file = File(filePath);
 
-    // Check if file exists
+    // Skip non-existent files
     if (!file.existsSync()) {
-      print('Warning: File "$filePath" does not exist.');
+      print('Error: File "$filePath" does not exist.');
       continue;
     }
 
-    // Compute the file's hash
-    final fileContent = file.readAsBytesSync();
-    final fileHash = sha1.convert(fileContent).toString();
+    // Skip ignored files
+    final relativePath = file.path.replaceFirst('${Directory.current.path}/', '');
+    if (ignoredGlobs.any((glob) => glob.matches(relativePath))) {
+      print('Ignoring file: $relativePath');
+      continue;
+    }
 
-    // Write the object to .bitvcs/objects/<hash>
-    final objectPath = '.bitvcs/objects/$fileHash';
-    final objectFile = File(objectPath);
+    // Compute hash and stage the file
+    final content = file.readAsBytesSync();
+    final hash = sha1.convert(content).toString();
 
+    final objectFile = File('${objectsDir.path}/$hash');
     if (!objectFile.existsSync()) {
-      objectFile.writeAsBytesSync(fileContent);
+      objectFile.writeAsBytesSync(content);
     }
 
     // Update the index
-    final fileEntry = '$filePath $fileHash\n';
-    if (!updatedIndex.toString().contains(fileEntry)) {
-      updatedIndex.writeln(fileEntry.trim());
-    }
+    final indexContent = indexFile.existsSync() ? indexFile.readAsStringSync() : '';
+    final updatedIndexContent = _updateIndex(indexContent, filePath, hash);
+    indexFile.writeAsStringSync(updatedIndexContent);
+
+    print('Added file: $filePath');
   }
-
-  // Write back the updated index
-  indexFile.writeAsStringSync(updatedIndex.toString());
-
-  print('Files added to staging area.');
 }
 
-//
+String _updateIndex(String indexContent, String filePath, String hash) {
+  final lines = indexContent.split('\n').where((line) => line.trim().isNotEmpty).toList();
+
+  // Replace existing entry for the file if it exists
+  final updatedLines = [
+    for (final line in lines)
+      if (!line.startsWith('$filePath ')) line,
+    '$filePath $hash',
+  ];
+
+  return updatedLines.join('\n');
+}
+// commit a file with a message
 void commit(String message) {
   final indexFile = File('.bitvcs/index');
   final headFile = File('.bitvcs/HEAD');
